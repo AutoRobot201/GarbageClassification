@@ -1,40 +1,114 @@
-import time
-import asyncio
-import AsyncSerial as async_serial
-import Protocol as protocol
+"""
+    @Author: WenXiaomo(SummerWen-Lab)
+    @Date: 2025-03-22
+    @Description: Main program entry for garbage detection system
 
-async def main(serial,baudrate):
-    serial = async_serial.AsyncSerial_t(serial,baudrate)
-    serial.startListening(lambda data: serial.write(data))
+    Garbage Classification:
+    0 : Wrong Type
+    1 : Recycle Waste
+    2 : Kitchen Waste
+    3 : Harmful Waste
+    4 : Other Waste
+"""
 
-    result = { # test result
-        "class" : 0,
-        "center_x" : 34,
-        "center_y" : 56
-    }
+import cv2
+from time import time
+from config import Config
+from detector import Detector
+from tracker import ObjectTracker
+from visualizer import Visualizer
 
-    while True: # 只针对一次投入, 多件垃圾的情况(若是多次投入需再外加循环)
-        read_frame = async_serial.AsyncSerial_t.getRawData()
-        parsed_frame = protocol.Protocol.parse_frame(read_frame)
-        single = protocol.Protocol.handle_command(parsed_frame["command"],parsed_frame["data_bytes"])
+class GarbageDetectionSystem:
+    def __init__(self):
+        """Initialize system components"""
+        self.cap = cv2.VideoCapture(Config.CAMERA_ID)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, Config.FRAME_WIDTH)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, Config.FRAME_HEIGHT)
         
-        # print(single) # --test input
-
-        if single == 'send':
-            # get_result
-            if result["class"] == 5: # 特殊编号, 5表示已经分类完了 
-                print("All subjects have been classified.") # 可替换成PyQt显示
-                break
-            else:
-                send_frame = protocol.Protocol.build_command_0x3001(
-                                                                    result["class"],
-                                                                    result["center_x"],
-                                                                    result["center_y"]
-                                                                )
-                serial.write(send_frame)
-                print(f"Sent frame: {send_frame.hex()}")
-
-            
+        self.detector = Detector()
+        self.tracker = ObjectTracker()
+        self.last_time = time()
+        self.frame_count = 0
+    
+    def run(self):
+        """Main execution loop"""
+        try:
+            while True:
+                if not self._check_frame_rate():
+                    continue
+                
+                frame = self._read_frame()
+                if frame is None:
+                    break
+                
+                detections = self._process_detection(frame)
+                self._process_tracking(detections)
+                self._visualize(frame)
+                
+                if self._check_exit():
+                    break
+        finally:
+            self._cleanup()
+    
+    def _check_frame_rate(self):
+        """Control frame processing rate"""
+        current_time = time()
+        if current_time - self.last_time < Config.FRAME_INTERVAL:
+            return False
+        self.last_time = current_time
+        self.frame_count += 1
+        return True
+    
+    def _read_frame(self):
+        """Capture frame from camera"""
+        ret, frame = self.cap.read()
+        if not ret:
+            print("Failed to capture frame")
+            return None
+        return frame
+    
+    def _process_detection(self, frame):
+        """Process object detection"""
+        detections = self.detector.detect(frame)
+        return [d for d in detections if self._in_detection_zone(d['pos'])]
+    
+    def _in_detection_zone(self, pos):
+        """Check if position is within target zone"""
+        x, y = pos
+        x1, y1, x2, y2 = Config.DETECTION_ZONE
+        return x1 <= x <= x2 and y1 <= y <= y2
+    
+    def _process_tracking(self, detections):
+        """Process object tracking"""
+        self.tracker.update(detections)
+        for obj_id, obj in self.tracker.get_stable_objects():
+            self._handle_stable_object(obj_id, obj)
+    
+    def _handle_stable_object(self, obj_id, obj):
+        """Handle stable object detection"""
+        last_pos = obj['positions'][-1]
+        print(
+            f"\n🚀 Stable Object {obj_id} | "
+            f"Class: {obj['class']} | "
+            f"Position: ({last_pos[0]:.1f}, {last_pos[1]:.1f}) | "
+            f"Confidence: {obj['confidence']:.2f}"
+        )
+    
+    def _visualize(self, frame):
+        """Handle visualization"""
+        Visualizer.draw_detection_zone(frame)
+        Visualizer.draw_tracking_info(frame, self.tracker.tracked_objects)
+        Visualizer.show_frame(frame)
+    
+    def _check_exit(self):
+        """Check exit condition"""
+        return cv2.waitKey(1) & 0xFF == ord('q')
+    
+    def _cleanup(self):
+        """Release resources"""
+        self.cap.release()
+        cv2.destroyAllWindows()
 
 if __name__ == '__main__':
-    asyncio.run(main(serial="COM2",baudrate=115200))
+    system = GarbageDetectionSystem()
+    system.run()
