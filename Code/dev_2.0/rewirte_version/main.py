@@ -1,31 +1,52 @@
+# main.py
 import cv2
-from typing import Deque, Tuple
+import time
 from collections import deque
+from typing import Deque, Tuple
+from PyQt5.QtCore import QObject, pyqtSignal, Qt, QTimer
+from PyQt5.QtGui import QImage, QColor
 from config import *
 from detector import ObjectDetector
-from visualizer import Visualizer
 from serial_communicate import SerialCommunicator
+from shared import shared
 
-class GarbageDetectionSystem:
+class GarbageDetectionSystem(QObject):
+    frame_ready = pyqtSignal(QImage)
+    detection_result = pyqtSignal(list)
+    status_changed = pyqtSignal(str)
+
     def __init__(self):
-        # 初始化模块
+        super().__init__()
         self.serial_com = SerialCommunicator(SERIAL_PORT, BAUDRATE)
         self.detector = ObjectDetector(MODEL_PATH, DETECTION_ZONE, COORD_TRANSFORM)
-        self.visualizer = Visualizer(DETECTION_ZONE, VISUAL_CONFIG)
-        
-        # 初始化摄像头
         self.cap = self._init_camera()
-        
-        # 状态控制
+        self.running = True
         self.waiting_trigger = True
         self.stable_count = 0
         self.position_history: Deque[Tuple[int, int]] = deque(maxlen=STABILITY_FRAMES)
+        self.last_serial_check = time.time()
+        
+        # 串口检测定时器
+        self.serial_timer = QTimer()
+        self.serial_timer.timeout.connect(self.check_serial)
+        self.serial_timer.start(100)  # 每100ms检查一次串口
 
     def _init_camera(self):
         cap = cv2.VideoCapture(CAMERA_INDEX)
         if not cap.isOpened():
             raise RuntimeError("无法打开摄像头")
         return cap
+
+    def check_serial(self):
+        """检查串口消息"""
+        if self.serial_com and self.serial_com.serial:
+            try:
+                if self.serial_com.serial.in_waiting > 0:
+                    data = self.serial_com.serial.read(self.serial_com.serial.in_waiting).decode().strip()
+                    if "next" in data:
+                        self.start_detection_trigger()
+            except Exception as e:
+                print(f"串口读取错误: {str(e)}")
 
     def check_stability(self, current_pos: Tuple[int, int]) -> bool:
         if len(self.position_history) < STABILITY_FRAMES:
@@ -36,23 +57,24 @@ class GarbageDetectionSystem:
             for pos in self.position_history
         )
 
-    def run(self):
+    def start_detection(self):
         try:
-            while True:
+            while self.running:
                 ret, frame = self.cap.read()
-                if not ret:
-                    print("视频流中断")
-                    break
+                if not ret: break
+
+                # 绘制ROI区域
+                x1, y1, x2, y2 = DETECTION_ZONE
+                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
                 
-                key = cv2.waitKey(1)
-                if key == 13:  # Enter键
-                    self.waiting_trigger = False
-                elif key == ord('q'):
-                    break
+                # 处理检测逻辑
+                processed_frame = self.process_frame(frame.copy())
+                self._emit_frame(processed_frame)
                 
                 detected = []
                 if not self.waiting_trigger:
                     detected = self.detector.process_frame(frame)
+                    self.detection_result.emit(detected)
                     
                     if detected:
                         current = detected[0]
@@ -60,37 +82,45 @@ class GarbageDetectionSystem:
                         self.position_history.append(current_pos)
                         
                         if self.check_stability(current_pos):
-                            trans_cx, trans_cy = self.detector.transform_coordinates(*current_pos)
-                            data_frame = f"{len(detected)}{current[1]}000{trans_cx:03d}{trans_cy:03d}"
-                            
-                            print(f"[稳定检测] 类别:{current[1]} 坐标({trans_cx},{trans_cy}) 数据帧: {data_frame}")
-                            self.serial_com.send_data(data_frame) # 这里通过串口向下位机发送数据
-                            
+                            shared.update_count.emit(current[1])
                             self.waiting_trigger = True
                             self.position_history.clear()
                             self.stable_count = 0
-                        else:
-                            self.stable_count = min(self.stable_count+1, STABILITY_FRAMES)
-                    else:
-                        self.position_history.clear()
-                        self.stable_count = 0
-                
-                # 更新界面
-                status_text = ("Awaiting Trigger" if self.waiting_trigger 
-                              else f"Stabilization {self.stable_count}/{STABILITY_FRAMES}")
-                cv2.imshow('Garbage Detection', 
-                          self.visualizer.draw_elements(frame, detected, status_text))
-        
-        finally:
-            self.cap.release()
-            cv2.destroyAllWindows()
-            self.serial_com.close()
 
-if __name__ == "__main__":
-    try:
-        print("=== 垃圾分类检测系统启动 ===")
-        system = GarbageDetectionSystem()
-        system.run()
-        print("=== 系统正常退出 ===")
-    except Exception as e:
-        print(f"!! 系统异常: {str(e)}")
+                self._update_status()
+
+        finally:
+            self.stop()
+
+    def process_frame(self, frame):
+        """绘制检测结果"""
+        if not self.waiting_trigger:
+            # 绘制历史轨迹
+            for pos in self.position_history:
+                cv2.circle(frame, pos, 3, (255, 0, 255), -1)
+        return frame
+
+    def _emit_frame(self, frame):
+        rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        h, w, ch = rgb_image.shape
+        bytes_per_line = ch * w
+        qt_image = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
+        self.frame_ready.emit(qt_image)
+
+    def _update_status(self):
+        status = "等待触发 ▶ 按Enter键或发送'next'指令开始检测" if self.waiting_trigger else \
+                f"检测中... 稳定进度: {self.stable_count}/{STABILITY_FRAMES}"
+        self.status_changed.emit(status)
+
+    def start_detection_trigger(self):
+        self.waiting_trigger = False
+        self.stable_count = 0
+        self.position_history.clear()
+
+    def stop(self):
+        self.running = False
+        self.serial_timer.stop()
+        self.cap.release()
+        cv2.destroyAllWindows()
+        self.serial_com.close()
+        shared.system_stop.emit()
