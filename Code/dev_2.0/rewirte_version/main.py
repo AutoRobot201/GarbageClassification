@@ -28,14 +28,19 @@ class GarbageDetectionSystem(QObject):
         self.last_serial_check = time.time()
         
         # 串口检测定时器
-        self.serial_timer = QTimer()
+        self.serial_timer = QTimer(self)
+        self.serial_timer.moveToThread(self.thread())
         self.serial_timer.timeout.connect(self.check_serial)
         self.serial_timer.start(100)  # 每100ms检查一次串口
 
     def _init_camera(self):
-        cap = cv2.VideoCapture(CAMERA_INDEX)
+        cap = cv2.VideoCapture(CAMERA_INDEX,cv2.CAP_DSHOW)
         if not cap.isOpened():
-            raise RuntimeError("无法打开摄像头")
+            for idx in [CAMERA_INDEX,0, 1, 2]:
+                cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
+                if cap.isOpened():
+                    print(f"成功通过自动探测打开摄像头索引 {idx}")
+                    break
         return cap
 
     def check_serial(self):
@@ -44,6 +49,7 @@ class GarbageDetectionSystem(QObject):
             try:
                 if self.serial_com.serial.in_waiting > 0:
                     data = self.serial_com.serial.read(self.serial_com.serial.in_waiting).decode().strip()
+                    print(f"接收到数据帧:{data}")
                     if "next" in data:
                         # self.start_detection_trigger()
                         self.trigger_request.emit()
@@ -61,9 +67,16 @@ class GarbageDetectionSystem(QObject):
 
     def start_detection(self):
         try:
-            while self.running:
+            retry_count = 0
+            while self.running and retry_count <= 2:
                 ret, frame = self.cap.read()
-                if not ret: break
+                if not ret:
+                    print("摄像头读取失败, 尝试重新初始化...")
+                    self.cap.release()
+                    time.sleep(10)
+                    self.cap = self._init_camera()
+                    retry_count += 1
+                    continue
 
                 # 绘制ROI区域
                 x1, y1, x2, y2 = DETECTION_ZONE
@@ -86,15 +99,26 @@ class GarbageDetectionSystem(QObject):
                         if self.check_stability(current_pos):
                             trans_cx, trans_cy = self.detector.transform_coordinates(current[2], current[3])
                             garbage_count = len(detected)
-                            print(f"[稳定目标] 类别: {current[1]} | 转换坐标: ({trans_cx}, {trans_cy}) | 画面垃圾总数: {garbage_count}")
-                            print(f"""
-                                    [稳定帧报告]
-                                    检测时间: {time.strftime('%Y-%m-%d %H:%M:%S')}
-                                    目标类别: {['可回收物','有害垃圾','厨余垃圾','其他垃圾'][current[1]]}
-                                    机械臂坐标: ({trans_cx}, {trans_cy})
-                                    画面垃圾分布: {[obj[1] for obj in detected]}
-                                    """
-                                 )
+                            data_packet = f"{garbage_count}{current[1]+1}000{int(trans_cx):03d}{int(trans_cy):03d}"
+
+                            try:
+                                if self.serial_com:
+                                    if DEBUG_MODE:
+                                        print(f"[串口调试] 已发送: {data_packet.strip()}")
+                                    else:
+                                        self.serial_com.send_data(data_packet)
+                            except Exception as e:
+                                self.status_changed.emit(f"串口错误: {str(e)}")
+                                                         
+                            #print(f"[稳定目标] 类别: {current[1]} | 转换坐标: ({trans_cx}, {trans_cy}) | 画面垃圾总数: {garbage_count}")
+                            #print(f"""
+                            #        [稳定帧报告]
+                            #        检测时间: {time.strftime('%Y-%m-%d %H:%M:%S')}
+                            #        目标类别: {['可回收物','有害垃圾','厨余垃圾','其他垃圾'][current[1]]}
+                            #        机械臂坐标: ({trans_cx}, {trans_cy})
+                            #        画面垃圾分布: {[obj[1] for obj in detected]}
+                            #        """
+                            #     )
 
                             shared.update_count.emit(current[1])
                             self.waiting_trigger = True
@@ -127,7 +151,7 @@ class GarbageDetectionSystem(QObject):
         self.status_changed.emit(status)
 
     def start_detection_trigger(self):
-        print(f"[Trigger] 触发信号来源: {'串口' if not hasattr(self, 'keyboard') else '键盘'}") # 信号跟踪测试
+        print(f"[Trigger] 触发信号来源: {'串口' if hasattr(self, 'keyboard') else '键盘'}") # 信号跟踪测试
         self.waiting_trigger = False
         self.stable_count = 0
         self.position_history.clear()

@@ -20,6 +20,7 @@ class ObjectDetector:
 
     def process_frame(self, frame) -> List[Tuple]:
         """处理单帧检测"""
+        CONF_THRESHOLD = 0.7
         x1, y1, x2, y2 = self.detection_zone
         roi = frame[y1:y2, x1:x2]
         results = self.model(roi)
@@ -29,6 +30,7 @@ class ObjectDetector:
             for box, cls, conf in zip(result.boxes.xyxy.cpu().numpy(),
                                      result.boxes.cls.cpu().numpy().astype(int),
                                      result.boxes.conf.cpu().numpy()):
+                if conf < CONF_THRESHOLD: continue
                 
                 if cls == 2 or cls == 3 or cls == 9 : cls = 0
                 elif cls == 0 or cls == 1 : cls = 1
@@ -43,11 +45,11 @@ class ObjectDetector:
                     global_y_max = y_max + y1
                     
                     area = (x_max - x_min) * (y_max - y_min)
-                    cx = (global_x_min + global_x_max) // 2
-                    cy = (global_y_min + global_y_max) // 2
+                    cx = (global_x_min + global_x_max) // 2 
+                    cy = (global_y_min + global_y_max) // 2 
                     
                     detected.append((
-                        area, cls, cx, cy,
+                        area, cls, cx + 10, cy + 5,
                         global_x_min, global_y_min,
                         global_x_max, global_y_max
                     ))

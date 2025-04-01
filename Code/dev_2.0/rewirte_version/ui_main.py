@@ -15,7 +15,7 @@ class MainWindow(QMainWindow):
 
     def init_ui(self):
         """初始化用户界面"""
-        self.setWindowTitle("智能垃圾分类系统 v2.2")
+        self.setWindowTitle("智能垃圾分类系统 v2025-04-01")
         self.setMinimumSize(1280, 720)
         self.setStyleSheet("background-color: #f5f6fa;")
 
@@ -265,15 +265,15 @@ class MainWindow(QMainWindow):
                     # 绘制边界框
                     pen = QPen(QColor(255, 0, 0), 2)
                     painter.setPen(pen)
-                    painter.drawRect(x1, y1, x2-x1, y2-y1)
+                    painter.drawRect(x1+10, y1+10, x2-x1+10, y2-y1+10)
                     
                     # 绘制中心点
-                    painter.setBrush(QColor(255, 0, 255))
-                    painter.drawEllipse(QPoint(cx, cy), 5, 5)
+                    painter.setBrush(QColor(0, 0, 255))
+                    painter.drawEllipse(QPoint(cx, cy), 3, 3)
                     
                     # 绘制类别标签
-                    painter.setFont(QFont("Microsoft YaHei", 12))
-                    painter.drawText(x1+10, y1+30, f"类别: {cls}")
+                    # painter.setFont(QFont("Microsoft YaHei", 12))
+                    # painter.drawText(x1+10, y1+30, f"类别: {cls}")
 
                 painter.end()
                 self.video_label.setPixmap(pixmap)
