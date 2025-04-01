@@ -29,6 +29,12 @@ class ObjectDetector:
             for box, cls, conf in zip(result.boxes.xyxy.cpu().numpy(),
                                      result.boxes.cls.cpu().numpy().astype(int),
                                      result.boxes.conf.cpu().numpy()):
+                
+                if cls == 2 or cls == 3 or cls == 9 : cls = 0
+                elif cls == 0 or cls == 1 : cls = 1
+                elif cls == 4 or cls == 5 or cls == 6 : cls = 2
+                elif cls == 7 or cls == 8 : cls = 3
+
                 if 0 <= cls <= 4:
                     x_min, y_min, x_max, y_max = map(int, box)
                     global_x_min = x_min + x1

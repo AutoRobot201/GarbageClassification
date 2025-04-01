@@ -82,6 +82,18 @@ class GarbageDetectionSystem(QObject):
                         self.position_history.append(current_pos)
                         
                         if self.check_stability(current_pos):
+                            trans_cx, trans_cy = self.detector.transform_coordinates(current[2], current[3])
+                            garbage_count = len(detected)
+                            print(f"[稳定目标] 类别: {current[1]} | 转换坐标: ({trans_cx}, {trans_cy}) | 画面垃圾总数: {garbage_count}")
+                            print(f"""
+                                    [稳定帧报告]
+                                    检测时间: {time.strftime('%Y-%m-%d %H:%M:%S')}
+                                    目标类别: {['可回收物','有害垃圾','厨余垃圾','其他垃圾'][current[1]]}
+                                    机械臂坐标: ({trans_cx}, {trans_cy})
+                                    画面垃圾分布: {[obj[1] for obj in detected]}
+                                    """
+                                 )
+
                             shared.update_count.emit(current[1])
                             self.waiting_trigger = True
                             self.position_history.clear()

@@ -1,0 +1,21 @@
+path: E:/Code/NJUST-AutoRobot/GarbageClassification/Dataset/green_backgroud
+train: images/train  # 自动关联 labels/train
+val: images/val      # 自动关联 labels/val
+test: images/test    # 可选测试集
+
+# 类别信息
+names:
+  0: battery
+  1: drug
+  2: plastic
+  3: metal
+  4: potato
+  5: carrot
+  6: daikon
+  7: brick
+  8: cobblestone
+  9: cup
+
+# 图像参数
+nc: 10
+download: false

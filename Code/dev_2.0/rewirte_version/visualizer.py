@@ -19,7 +19,7 @@ class Visualizer:
         # 绘制检测结果
         if detected:
             for obj in detected:
-                _, cls, cx, cy, x1_, y1_, x2_, y2_ = obj
+                _, cls, cx, cy, x1_, y1_, x2_, y2_ = obj     
                 cv2.rectangle(frame, (x1_, y1_), (x2_, y2_), 
                             self.box_color, self.box_thickness)
                 cv2.circle(frame, (cx, cy), self.center_radius,

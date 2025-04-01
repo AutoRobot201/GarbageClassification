@@ -1,9 +1,9 @@
 # 系统配置参数
-MODEL_PATH = 'E:\\Code\\NJUST-AutoRobot\\GarbageClassification\\Code\\dev_2.0\\garbage.pt'
+MODEL_PATH = 'E:\\Code\\NJUST-AutoRobot\\GarbageClassification\\Code\\dev_2.0\\best-v20250330.pt'
 SERIAL_PORT = 'COM5'
 BAUDRATE = 115200
 CAMERA_INDEX = 1
-DETECTION_ZONE = [190, 110, 445, 365]
+DETECTION_ZONE = [202,107,471,373]
 STABILITY_THRESHOLD = 15
 STABILITY_FRAMES = 10
 

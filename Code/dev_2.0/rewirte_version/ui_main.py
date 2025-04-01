@@ -283,6 +283,7 @@ class MainWindow(QMainWindow):
     def update_count(self, cls_index):
         """更新分类计数"""
         if 0 <= cls_index <= 3:
+            # print(f"种类：{cls_index}")
             self.counts[cls_index] += 1
             label = getattr(self, f"count_label_{cls_index}")
             label.setText(str(self.counts[cls_index]))
