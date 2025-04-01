@@ -1,7 +1,6 @@
-path: E:/Code/NJUST-AutoRobot/GarbageClassification/Dataset/green_backgroud
-train: images/train  # 自动关联 labels/train
-val: images/val      # 自动关联 labels/val
-test: images/test    # 可选测试集
+path: E:/Code/NJUST-AutoRobot/GarbageClassification/Dataset/black_backgroud
+train: train/images
+val: val/images    
 
 # 类别信息
 names:

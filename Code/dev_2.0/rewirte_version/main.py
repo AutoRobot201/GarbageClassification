@@ -14,6 +14,7 @@ class GarbageDetectionSystem(QObject):
     frame_ready = pyqtSignal(QImage)
     detection_result = pyqtSignal(list)
     status_changed = pyqtSignal(str)
+    trigger_request = pyqtSignal()
 
     def __init__(self):
         super().__init__()
@@ -44,7 +45,8 @@ class GarbageDetectionSystem(QObject):
                 if self.serial_com.serial.in_waiting > 0:
                     data = self.serial_com.serial.read(self.serial_com.serial.in_waiting).decode().strip()
                     if "next" in data:
-                        self.start_detection_trigger()
+                        # self.start_detection_trigger()
+                        self.trigger_request.emit()
             except Exception as e:
                 print(f"串口读取错误: {str(e)}")
 
@@ -125,6 +127,7 @@ class GarbageDetectionSystem(QObject):
         self.status_changed.emit(status)
 
     def start_detection_trigger(self):
+        print(f"[Trigger] 触发信号来源: {'串口' if not hasattr(self, 'keyboard') else '键盘'}") # 信号跟踪测试
         self.waiting_trigger = False
         self.stable_count = 0
         self.position_history.clear()

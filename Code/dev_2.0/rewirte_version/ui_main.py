@@ -215,6 +215,7 @@ class MainWindow(QMainWindow):
         self.worker.moveToThread(self.thread)
 
         # 信号连接
+        self.worker.system.trigger_request.connect(self.worker.system.start_detection_trigger)
         self.thread.started.connect(self.worker.run)
         self.worker.finished.connect(self.thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
@@ -232,7 +233,8 @@ class MainWindow(QMainWindow):
         """处理键盘事件"""
         if event.key() in (Qt.Key_Return, Qt.Key_Enter):
             if self.stack.currentIndex() == 1:
-                shared.trigger_detection.emit()
+                # shared.trigger_detection.emit()
+                self.worker.system.trigger_request.emit()
                 self.status_label.setText("🔄 检测已触发...")
         elif event.key() == Qt.Key_Escape:
             self.stack.setCurrentIndex(0)

@@ -9,3 +9,11 @@
 /Dataset
 
 /Code/dev_2.0/runs
+/Code/dev_2.0/yolo11n.pt
+/Code/dev_2.0/train_garbage.py
+/Code/dev_2.0/garbage.yaml
+
+/runs
+
+/yolo11m.pt
+/yolo11n.pt
