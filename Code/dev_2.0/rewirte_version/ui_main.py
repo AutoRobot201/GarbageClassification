@@ -1,21 +1,29 @@
 # ui.py
+import cv2
 import sys
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from shared import shared
+# from main import number_counter
 import main
+import detector
+from config import *
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.counts = [0, 0, 0, 0]  # 可回收物, 有害垃圾, 厨余垃圾, 其他垃圾
+        self.video_capture = None
+        self.video_timer = QTimer(self)
         self.init_ui()
         self.start_detection_thread()
+        self.video_timer.timeout.connect(self.update_video_frame)
 
     def init_ui(self):
         """初始化用户界面"""
-        self.setWindowTitle("智能垃圾分类系统 v2025-04-01")
+        self.setWindowTitle("智能垃圾分类系统 v2025-04")
         self.setMinimumSize(1280, 720)
         self.setStyleSheet("background-color: #f5f6fa;")
 
@@ -26,22 +34,51 @@ class MainWindow(QMainWindow):
         # 初始化页面
         self.init_start_page()
         self.init_detect_page()
+        self.setup_video()
+
+    def setup_video(self):
+        """初始化视频播放组件"""
+        if self.video_capture:
+            self.video_capture.release()
+        
+        # 加载宣传视频（请修改为实际路径）
+        self.video_capture = cv2.VideoCapture('E:\\Code\\NJUST-AutoRobot\\GarbageClassification\\Code\\dev_2.0\\rewirte_version\\video.mp4')
+        if self.video_capture.isOpened():
+            self.video_timer.start(30)
+        else:
+            print("无法加载宣传视频")
 
     def init_start_page(self):
         """启动页面初始化"""
         start_page = QWidget()
-        layout = QVBoxLayout(start_page)
-        layout.setContentsMargins(50, 50, 50, 50)
+        main_layout = QHBoxLayout(start_page)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # 视频区域 (左侧2/3)
+        video_widget = QWidget()
+        video_widget.setStyleSheet("background-color: #000000;")
+        video_layout = QVBoxLayout(video_widget)
+        self.video_label = QLabel()
+        self.video_label.setAlignment(Qt.AlignCenter)
+        video_layout.addWidget(self.video_label)
+        main_layout.addWidget(video_widget, 2)
+
+        # 右侧控制面板 (1/3)
+        right_panel = QWidget()
+        right_panel.setStyleSheet("background-color: #f5f6fa;")
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(50, 50, 50, 50)
+        right_layout.setSpacing(40)
 
         # 系统标题
         title_label = QLabel("垃圾分类检测系统")
         title_label.setAlignment(Qt.AlignCenter)
         title_label.setStyleSheet("""
             QLabel {
-                font-size: 48px;
+                font-size: 36px;
                 color: #2c3e50;
                 font-weight: bold;
-                margin-bottom: 40px;
             }
         """)
 
@@ -62,10 +99,12 @@ class MainWindow(QMainWindow):
             }
         """)
 
-        layout.addStretch()
-        layout.addWidget(title_label)
-        layout.addWidget(self.start_btn, 0, Qt.AlignCenter)
-        layout.addStretch()
+        right_layout.addStretch()
+        right_layout.addWidget(title_label)
+        right_layout.addWidget(self.start_btn, 0, Qt.AlignCenter)
+        right_layout.addStretch()
+
+        main_layout.addWidget(right_panel, 1)
         self.stack.addWidget(start_page)
 
     def init_detect_page(self):
@@ -97,14 +136,14 @@ class MainWindow(QMainWindow):
         # 视频显示区域
         video_widget = QWidget()
         video_layout = QVBoxLayout(video_widget)
-        self.video_label = QLabel()
-        self.video_label.setAlignment(Qt.AlignCenter)
-        self.video_label.setStyleSheet("""
+        self.detect_video_label = QLabel()
+        self.detect_video_label.setAlignment(Qt.AlignCenter)
+        self.detect_video_label.setStyleSheet("""
             background-color: #000;
             border-radius: 10px;
             border: 2px solid #666;
         """)
-        video_layout.addWidget(self.video_label)
+        video_layout.addWidget(self.detect_video_label)
 
         # 右侧信息面板
         info_widget = QWidget()
@@ -158,19 +197,83 @@ class MainWindow(QMainWindow):
             }
         """)
 
-        # 组装右侧面板
+        # 组装布局
         info_layout.addWidget(stats_title)
         info_layout.addWidget(stats_container)
+
+        # 实时垃圾信息面板
+        info_group = QGroupBox("垃圾状态")
+        info_group.setStyleSheet("""
+            QGroupBox {
+                font-size: 18px;
+                color: #2c3e50;
+                border: 2px solid #3498db;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 15px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+            }
+        """)
+        info_grid = QGridLayout()
+        
+        # 创建信息标签
+        self.garbage_info_labels = {
+            'type_num': QLabel("0"),
+            'type_text': QLabel("---"),
+            'status': QLabel("1"),
+            'load': QLabel("OK")
+        }
+        
+        # 设置标签样式
+        for label in self.garbage_info_labels.values():
+            label.setStyleSheet("font-size: 16px; color: #2c3e50;")
+            label.setAlignment(Qt.AlignRight)
+        
+        # 添加标签到网格
+        info_grid.addWidget(QLabel("序号:"), 0, 0)
+        info_grid.addWidget(self.garbage_info_labels['type_num'], 0, 1)
+        info_grid.addWidget(QLabel("垃圾类型:"), 1, 0)
+        info_grid.addWidget(self.garbage_info_labels['type_text'], 1, 1)
+        info_grid.addWidget(QLabel("垃圾数量:"), 2, 0)
+        info_grid.addWidget(self.garbage_info_labels['status'], 2, 1)
+        info_grid.addWidget(QLabel("状态:"), 3, 0)
+        info_grid.addWidget(self.garbage_info_labels['load'], 3, 1)
+        
+        info_group.setLayout(info_grid)
+        info_layout.addWidget(info_group)
+
+
         info_layout.addWidget(self.reset_btn)
         info_layout.addStretch()
 
-        # 组装主布局
         content_layout.addWidget(video_widget, 3)
         content_layout.addWidget(info_widget, 1)
         main_layout.addWidget(self.status_label)
         main_layout.addWidget(content_widget)
 
         self.stack.addWidget(detect_page)
+
+    
+    def update_garbage_info(self, cls_index):
+        """更新垃圾信息显示"""
+        type_mapping = {
+            0: ("0", "可回收物"),
+            1: ("1", "有害垃圾"),
+            2: ("2", "厨余垃圾"),
+            3: ("3", "其他垃圾")
+        }
+        
+        if cls_index in type_mapping:
+            num, text = type_mapping[cls_index]
+            self.garbage_info_labels['type_num'].setText(str(main.number_counter))
+            print("NUMBER_COUNTER = ",main.number_counter)
+            self.garbage_info_labels['type_text'].setText(text)
+            self.garbage_info_labels['status'].setText("1")
+            self.garbage_info_labels['load'].setText("OK")
 
     def create_bin_widget(self, name, color, index):
         """创建分类统计条目"""
@@ -179,7 +282,6 @@ class MainWindow(QMainWindow):
         layout = QHBoxLayout(container)
         layout.setContentsMargins(12, 12, 12, 12)
 
-        # 颜色标识
         color_label = QLabel()
         color_label.setFixedSize(36, 36)
         color_label.setStyleSheet(f"""
@@ -188,7 +290,6 @@ class MainWindow(QMainWindow):
             border: 2px solid #fff;
         """)
 
-        # 文字信息
         text_widget = QWidget()
         text_layout = QVBoxLayout(text_widget)
         text_layout.setContentsMargins(10, 0, 0, 0)
@@ -214,18 +315,16 @@ class MainWindow(QMainWindow):
         self.worker = DetectionWorker()
         self.worker.moveToThread(self.thread)
 
-        # 信号连接
         self.worker.system.trigger_request.connect(self.worker.system.start_detection_trigger)
         self.thread.started.connect(self.worker.run)
         self.worker.finished.connect(self.thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
         self.thread.finished.connect(self.thread.deleteLater)
         
-        self.worker.system.frame_ready.connect(self.update_video_frame)
+        self.worker.system.frame_ready.connect(self.update_detect_frame)
         self.worker.system.status_changed.connect(self.update_status)
         self.worker.system.detection_result.connect(self.handle_detection)
         shared.update_count.connect(self.update_count)
-        shared.trigger_detection.connect(self.worker.system.start_detection_trigger)
 
         self.thread.start()
 
@@ -233,81 +332,93 @@ class MainWindow(QMainWindow):
         """处理键盘事件"""
         if event.key() in (Qt.Key_Return, Qt.Key_Enter):
             if self.stack.currentIndex() == 1:
-                # shared.trigger_detection.emit()
                 self.worker.system.trigger_request.emit()
                 self.status_label.setText("🔄 检测已触发...")
         elif event.key() == Qt.Key_Escape:
             self.stack.setCurrentIndex(0)
         super().keyPressEvent(event)
 
-    def update_video_frame(self, image):
-        """更新视频画面"""
+    def update_video_frame(self):
+        """更新启动页视频"""
+        ret, frame = self.video_capture.read()
+        if ret:
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            h, w, ch = frame.shape
+            bytes_per_line = ch * w
+            q_img = QImage(frame.data, w, h, bytes_per_line, QImage.Format_RGB888)
+            pixmap = QPixmap.fromImage(q_img)
+            self.video_label.setPixmap(pixmap.scaled(
+                self.video_label.size(), 
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation
+            ))
+
+    def update_detect_frame(self, image):
+        """更新检测页视频"""
         pixmap = QPixmap.fromImage(image)
         scaled_pixmap = pixmap.scaled(
-            self.video_label.size(),
+            self.detect_video_label.size(),
             Qt.KeepAspectRatio,
             Qt.SmoothTransformation
         )
-        self.video_label.setPixmap(scaled_pixmap)
+        self.detect_video_label.setPixmap(scaled_pixmap)
 
     def handle_detection(self, detected):
-        """处理检测结果并绘制标注"""
+        """处理检测结果"""
+        cls_index = 0
         if detected:
-            # 在现有视频帧上绘制
-            pixmap = self.video_label.pixmap()
-            if pixmap:
-                painter = QPainter(pixmap)
-                painter.setRenderHint(QPainter.Antialiasing)
-
-                for obj in detected:
-                    _, cls, cx, cy, x1, y1, x2, y2 = obj
+             # 获取第一个检测目标的信息
+            first_obj = detected[0]
+            cls_index = first_obj[1]
+        elif detector.time_outs >= TIMEOUT_THRESHOLD: 
+            cls_index = 0
+        
+        # 更新垃圾信息显示
+        self.update_garbage_info(cls_index)
+            
+        pixmap = self.detect_video_label.pixmap()
+        if pixmap:
+            painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.Antialiasing)
+                
+            for obj in detected:
+                _, cls, cx, cy, x1, y1, x2, y2 = obj
                     
-                    # 绘制边界框
-                    pen = QPen(QColor(255, 0, 0), 2)
-                    painter.setPen(pen)
-                    painter.drawRect(x1+10, y1+10, x2-x1+10, y2-y1+10)
+                # 绘制边界框
+                pen = QPen(QColor(255, 0, 0), 2)
+                painter.setPen(pen)
+                painter.drawRect(x1, y1, x2-x1, y2-y1)
                     
-                    # 绘制中心点
-                    painter.setBrush(QColor(0, 0, 255))
-                    painter.drawEllipse(QPoint(cx, cy), 3, 3)
+                # 绘制中心点
+                painter.setBrush(QColor(0, 0, 255))
+                painter.drawEllipse(QPoint(cx, cy), 3, 3)
                     
-                    # 绘制类别标签
-                    # painter.setFont(QFont("Microsoft YaHei", 12))
-                    # painter.drawText(x1+10, y1+30, f"类别: {cls}")
-
-                painter.end()
-                self.video_label.setPixmap(pixmap)
+            painter.end()
+            self.detect_video_label.setPixmap(pixmap)
 
     def update_status(self, status):
-        """更新状态栏"""
         self.status_label.setText(status)
 
     def update_count(self, cls_index):
-        """更新分类计数"""
         if 0 <= cls_index <= 3:
-            # print(f"种类：{cls_index}")
             self.counts[cls_index] += 1
             label = getattr(self, f"count_label_{cls_index}")
             label.setText(str(self.counts[cls_index]))
-            # 添加颜色动画
             label.setStyleSheet("color: #e74c3c;")
             QTimer.singleShot(300, lambda: label.setStyleSheet("color: #2c3e50;"))
 
     def reset_counts(self):
-        """重置所有计数器"""
         self.counts = [0, 0, 0, 0]
         for i in range(4):
-            label = getattr(self, f"count_label_{i}")
-            label.setText("0")
+            getattr(self, f"count_label_{i}").setText("0")
         self.status_label.setText("计数器已重置")
 
     def switch_to_detect_page(self):
-        """切换到检测页面"""
         self.stack.setCurrentIndex(1)
-        shared.trigger_detection.emit()  # 自动开始检测
+        self.worker.system.trigger_request.emit()
+        #shared.trigger_detection.emit()
 
     def closeEvent(self, event):
-        """处理窗口关闭事件"""
         shared.system_stop.emit()
         if self.thread.isRunning():
             self.thread.quit()
@@ -323,18 +434,13 @@ class DetectionWorker(QObject):
         self.system = main.GarbageDetectionSystem()
 
     def run(self):
-        """启动检测系统"""
         self.system.start_detection()
         self.finished.emit()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    
-    # 设置全局字体
-    font = QFont()
-    font.setFamily("Microsoft YaHei")
+    font = QFont("Microsoft YaHei", 10)
     app.setFont(font)
-
     window = MainWindow()
     window.show()
     sys.exit(app.exec_())

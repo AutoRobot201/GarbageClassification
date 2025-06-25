@@ -1,0 +1,19 @@
+path: E:\\Code\\NJUST-AutoRobot\\GarbageClassification\\Dataset\\mix_data_20250417
+train: train
+val: val
+
+names:
+  0: paper_cup
+  1: battery
+  2: plastic_bottle
+  3: kitchen
+  4: ceramic_chip
+  5: stone
+  6: gravel
+  7: medicine_board
+  8: metal_can
+  9: pill
+  10: potato 
+
+nc: 11
+download: false

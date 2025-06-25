@@ -40,16 +40,16 @@ def main():
     
     config = {
         # 数据集配置
-        'data_yaml': Path('E:/Code/NJUST-AutoRobot/GarbageClassification/Code/dev_2.0/garbage.yaml'),
-        'dataset_root': Path('E:/Code/NJUST-AutoRobot/GarbageClassification/Dataset/black_backgroud'),
+        'data_yaml': Path('E:/Code/NJUST-AutoRobot/GarbageClassification/Code/dev_2.0/garbage_ylj.yaml'),
+        'dataset_root': Path("E:\\Code\\NJUST-AutoRobot\\GarbageClassification\\Dataset\\mix_data_20250417"),
         
         # 模型配置
-        'pretrained_model': 'yolo11m.pt' if not args.resume else '',  # 自动处理继续训练
+        'pretrained_model': 'yolov8s.pt' if not args.resume else '',  # 自动处理继续训练
         'output_dir': Path('runs/train'),  # 输出目录
         
         # 训练超参数
         'train_params': {
-            'epochs': 150,
+            'epochs': 100,
             'batch': 16,
             'imgsz': 640,
             'optimizer': 'AdamW',
@@ -82,7 +82,7 @@ def main():
     train_params = {
         'data': str(config['data_yaml']),
         'project': str(config['output_dir']),
-        'name': 'garbage_v1',
+        'name': 'garbage_mix_YOLOv8s_ep100_batch16',
         'device': config['device'],
         'exist_ok': True,
         'pretrained': not args.resume,

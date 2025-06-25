@@ -1,8 +1,10 @@
+# shared.py
 from PyQt5.QtCore import QObject, pyqtSignal
 
 class Communication(QObject):
-    update_count = pyqtSignal(int)      # 分类更新信号
-    trigger_detection = pyqtSignal()    # 检测触发信号
-    system_stop = pyqtSignal()          # 系统停止信号
+    update_count = pyqtSignal(int)
+    trigger_detection = pyqtSignal()
+    system_stop = pyqtSignal()
+    status_info = pyqtSignal(str, str, str)  # 新增状态信号
 
 shared = Communication()

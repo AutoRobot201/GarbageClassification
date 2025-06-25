@@ -1,3 +1,4 @@
+# serial_communicate.py
 import serial
 from typing import Optional
 
@@ -8,7 +9,6 @@ class SerialCommunicator:
         self.serial = self._init_serial()
 
     def _init_serial(self) -> Optional[serial.Serial]:
-        """初始化串口连接"""
         try:
             ser = serial.Serial(
                 port=self.port,
@@ -22,7 +22,6 @@ class SerialCommunicator:
             return None
 
     def send_data(self, data: str):
-        """发送数据帧"""
         if self.serial and self.serial.is_open:
             try:
                 self.serial.write(data.encode())
@@ -31,6 +30,5 @@ class SerialCommunicator:
                 print(f"串口发送失败: {str(e)}")
 
     def close(self):
-        """关闭串口"""
         if self.serial:
             self.serial.close()

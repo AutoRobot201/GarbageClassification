@@ -2,9 +2,11 @@ from ultralytics import YOLO
 import cv2
 from typing import List, Tuple
 
+time_outs = 0
+
 class ObjectDetector:
     def __init__(self, model_path: str, detection_zone: list, coord_config: dict):
-        self.model = YOLO(model_path)
+        self.model = YOLO(model_path,task="detect")
         self.detection_zone = detection_zone
         self.x_offset = coord_config['x_offset']
         self.y_offset = coord_config['y_offset']
@@ -19,11 +21,13 @@ class ObjectDetector:
         return trans_cx, trans_cy
 
     def process_frame(self, frame) -> List[Tuple]:
+        global time_outs
+        time_outs += 1
         """处理单帧检测"""
         CONF_THRESHOLD = 0.7
         x1, y1, x2, y2 = self.detection_zone
         roi = frame[y1:y2, x1:x2]
-        results = self.model(roi)
+        results = self.model(roi,imgsz=640)
         
         detected = []
         for result in results:
@@ -32,10 +36,19 @@ class ObjectDetector:
                                      result.boxes.conf.cpu().numpy()):
                 if conf < CONF_THRESHOLD: continue
                 
-                if cls == 2 or cls == 3 or cls == 9 : cls = 0
-                elif cls == 0 or cls == 1 : cls = 1
-                elif cls == 4 or cls == 5 or cls == 6 : cls = 2
-                elif cls == 7 or cls == 8 : cls = 3
+                """
+                    version - wxm : 
+                    if cls == 2 or cls == 3 or cls == 9 : cls = 0 # recycle
+                    elif cls == 0 or cls == 1 : cls = 1 # harmful
+                    elif cls == 4 or cls == 5 or cls == 6 : cls = 2 # kitchen
+                    elif cls == 7 or cls == 8 : cls = 3 # others
+                """
+                
+                # version - ylj
+                if cls == 0 or cls == 2 or cls == 8 : cls = 0 # recycle
+                elif cls == 1 or cls == 7 or cls == 9 : cls = 1 # harmful
+                elif cls == 3 or cls == 10 : cls = 2 # kitchen
+                elif cls == 4 or cls == 5 or cls == 6 : cls = 3 # others
 
                 if 0 <= cls <= 4:
                     x_min, y_min, x_max, y_max = map(int, box)
@@ -53,5 +66,7 @@ class ObjectDetector:
                         global_x_min, global_y_min,
                         global_x_max, global_y_max
                     ))
-        
+                     
+                    print("detected:",area,cls,cx+10,cy+5,global_x_min,global_y_min,global_x_max,global_y_max)
+
         return sorted(detected, key=lambda x: x[0], reverse=True)
